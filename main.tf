@@ -2,8 +2,7 @@
 terraform {
   required_version = ">= 1.1.7"
   required_providers {
-    template = "~> 2.2.0"
-    random = "~> 3.1.2"
+    random  = "~> 3.1.2"
     azurerm = "~> 3.24.0"
     azuread = "~> 2.29.0"
   }
@@ -181,9 +180,9 @@ resource "azurerm_network_security_group" "tf_nsg" {
 }
 
 resource "azurerm_network_interface" "tf_nic" {
-  name                      = "nic-${random_id.keyvault.hex}"
-  location                  = var.location
-  resource_group_name       = azurerm_resource_group.vault.name
+  name                = "nic-${random_id.keyvault.hex}"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.vault.name
 
   ip_configuration {
     name                          = "nic-${random_id.keyvault.hex}"
@@ -223,10 +222,14 @@ resource "azurerm_storage_account" "tf_storageaccount" {
   }
 }
 
-data "template_file" "setup" {
-  template = file("${path.module}/setup.tpl")
-
-  vars = {
+# Create virtual machine
+resource "azurerm_linux_virtual_machine" "tf_vm" {
+  name                  = var.vm_name
+  location              = var.location
+  resource_group_name   = azurerm_resource_group.vault.name
+  network_interface_ids = [azurerm_network_interface.tf_nic.id]
+  size                  = "Standard_DS1_v2"
+  custom_data = base64encode(templatefile("${abspath(path.module)}/setup.tpl", {
     resource_group_name = "${var.environment}-vault-rg"
     vm_name             = var.vm_name
     vault_version       = var.vault_version
@@ -236,19 +239,9 @@ data "template_file" "setup" {
     client_secret       = var.client_secret
     vault_name          = azurerm_key_vault.vault.name
     key_name            = var.key_name
-  }
-}
-
-# Create virtual machine
-resource "azurerm_linux_virtual_machine" "tf_vm" {
-  name                  = var.vm_name
-  location              = var.location
-  resource_group_name   = azurerm_resource_group.vault.name
-  network_interface_ids = [azurerm_network_interface.tf_nic.id]
-  size                  = "Standard_DS1_v2"
-  custom_data           = base64encode(data.template_file.setup.rendered)
-  computer_name         = var.vm_name
-  admin_username        = "azureuser"
+  }))
+  computer_name  = var.vm_name
+  admin_username = "azureuser"
 
   admin_ssh_key {
     username   = "azureuser"
